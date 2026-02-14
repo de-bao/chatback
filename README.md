@@ -439,6 +439,85 @@ chatback/
 
 ---
 
+---
+
+## 🌐 通过 Cloudflare Workers 统一域名
+
+如果你想让前端和后端使用同一个域名（如 `debaosite.dpdns.org`），可以使用 Cloudflare Workers 作为智能路由：
+
+### 架构
+
+```
+debaosite.dpdns.org (用户访问的统一域名)
+    ↓
+Cloudflare Workers (智能路由)
+    ├── /api/* → 后端 Replit 服务器 (https://chatback--debaocpc.replit.app)
+    └── /* → GitHub Pages (前端)
+```
+
+### 部署步骤
+
+#### 1. 安装 Wrangler CLI
+
+```bash
+npm install -g wrangler
+```
+
+#### 2. 登录 Cloudflare
+
+```bash
+wrangler login
+```
+
+#### 3. 配置环境变量
+
+在 Cloudflare Dashboard 中配置：
+1. 访问：https://dash.cloudflare.com
+2. Workers & Pages → chat-api-router → Settings → Variables
+3. 添加环境变量：
+   - `BACKEND_URL` = `https://chatback--debaocpc.replit.app`
+   - `FRONTEND_URL` = `https://your-username.github.io`（你的 GitHub Pages 地址）
+
+#### 4. 部署 Workers
+
+```bash
+npm run deploy
+```
+
+或：
+
+```bash
+wrangler deploy
+```
+
+#### 5. 配置自定义域名
+
+1. 在 Cloudflare Dashboard 中：
+   - Workers & Pages → chat-api-router → Settings → Triggers
+   - 添加 Custom Domain：`debaosite.dpdns.org`
+
+2. 或者配置路由（在 `wrangler.toml` 中）：
+   ```toml
+   routes = [
+     { pattern = "debaosite.dpdns.org/*", zone_name = "dpdns.org" }
+   ]
+   ```
+
+### 最终效果
+
+- 前端访问：`https://debaosite.dpdns.org/` → GitHub Pages
+- API 访问：`https://debaosite.dpdns.org/api/chat` → Replit 后端
+- API 访问：`https://debaosite.dpdns.org/api/chat/sessions` → Replit 后端
+
+### 注意事项
+
+- Workers 完全免费（每天 10 万次请求免费）
+- 无需信用卡
+- 自动处理 CORS
+- 低延迟（边缘计算）
+
+---
+
 ## 📄 许可证
 
 MIT
