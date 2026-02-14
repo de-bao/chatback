@@ -1,7 +1,8 @@
 /**
  * Cloudflare Workers 智能路由
  * - /api/* -> 转发到后端 Replit 服务器
- * - 其他路径 -> 转发到 GitHub Pages（前端）
+ * - /health -> 转发到后端 Replit 服务器
+ * - 其他路径 -> 转发到 Replit 前端 /docs
  */
 
 export default {
@@ -11,7 +12,7 @@ export default {
 
     // 从环境变量读取配置
     const BACKEND_URL = env.BACKEND_URL || 'https://chatback--debaocpc.replit.app';
-    const FRONTEND_URL = env.FRONTEND_URL || 'https://your-username.github.io';
+    const FRONTEND_URL = env.FRONTEND_URL || 'https://chatback--debaocpc.replit.app/docs';
 
     // 处理 OPTIONS 预检请求
     if (request.method === 'OPTIONS') {
@@ -27,11 +28,12 @@ export default {
     }
 
     // 处理 API 请求 - 转发到后端
-    if (path.startsWith('/api/')) {
+    // 包括 /api/* 路径和 /health 路径
+    if (path.startsWith('/api/') || path === '/health') {
       return handleApiRequest(request, BACKEND_URL);
     }
 
-    // 处理前端请求 - 转发到 GitHub Pages
+    // 处理前端请求 - 转发到 Replit 前端
     return handleFrontendRequest(request, FRONTEND_URL);
   }
 };
@@ -85,12 +87,21 @@ async function handleApiRequest(request, backendUrl) {
 }
 
 /**
- * 处理前端请求，转发到 GitHub Pages
+ * 处理前端请求，转发到 Replit 前端
  */
 async function handleFrontendRequest(request, frontendUrl) {
   try {
     const url = new URL(request.url);
-    const frontendRequestUrl = `${frontendUrl}${url.pathname}${url.search}`;
+    // 前端 URL 指向 Replit 的 /docs 路径
+    // 如果访问根路径，转发到 frontendUrl（已包含 /docs），否则拼接路径
+    let frontendRequestUrl;
+    if (url.pathname === '/' || url.pathname === '') {
+      // 根路径，直接使用 frontendUrl（已包含 /docs）
+      frontendRequestUrl = frontendUrl.endsWith('/') ? frontendUrl.slice(0, -1) : frontendUrl;
+    } else {
+      // 其他路径，拼接（注意：如果 frontendUrl 是 /docs，则路径会是 /docs/xxx）
+      frontendRequestUrl = `${frontendUrl}${url.pathname}${url.search}`;
+    }
 
     const frontendRequest = new Request(frontendRequestUrl, {
       method: request.method,
@@ -99,7 +110,7 @@ async function handleFrontendRequest(request, frontendUrl) {
 
     const response = await fetch(frontendRequest);
 
-    // 返回 GitHub Pages 的响应
+    // 返回 Replit 前端的响应
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
