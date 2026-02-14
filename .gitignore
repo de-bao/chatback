@@ -1,0 +1,27 @@
+# 环境变量文件（允许提交，用于 Cloudflare 部署）
+# .env
+
+# Python
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.Python
+
+# 数据库
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 上传文件
+uploads/
+
+# 日志
+*.log
+
