@@ -433,6 +433,9 @@ chatback/
 ├── Procfile           # 部署配置（Railway/Render）
 ├── runtime.txt        # Python 版本
 ├── run.sh            # 启动脚本
+├── worker.js         # Cloudflare Workers 路由脚本
+├── wrangler.toml     # Cloudflare Workers 配置
+├── package.json      # Node.js 依赖（用于 Workers）
 ├── .env              # 环境变量（已包含，可直接编辑）
 └── README.md         # 本文档
 ```
