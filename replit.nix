@@ -1,6 +1,1 @@
-{ pkgs }: {
-  deps = [
-    pkgs.python311
-    pkgs.bash
-  ];
-}
+{ pkgs }: { deps = [ pkgs.python311 pkgs.bash ]; }
