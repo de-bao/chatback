@@ -25,7 +25,12 @@ uploads/
 # 日志
 *.log
 
-
 # Node.js
 node_modules/
 package-lock.json
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.venv/
