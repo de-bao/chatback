@@ -9,7 +9,6 @@ __pycache__/
 .Python
 
 # 数据库
-*.db
 *.sqlite
 *.sqlite3
 
