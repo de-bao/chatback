@@ -1,8 +1,11 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import os
+import json
+import asyncio
 from dotenv import load_dotenv
 from openai import OpenAI
 from sqlalchemy.orm import Session
@@ -62,6 +65,7 @@ class Message(BaseModel):
 class ChatRequest(BaseModel):
     messages: List[Message]
     model: Optional[str] = None  # 可选，如果不提供则使用默认模型
+    stream: Optional[bool] = False  # 是否启用流式输出
 
 
 class ChatResponse(BaseModel):
@@ -96,11 +100,12 @@ async def health():
     return {"status": "healthy"}
 
 
-@app.post("/api/chat", response_model=ChatResponse)
+@app.post("/api/chat")
 async def chat(request: ChatRequest):
     """
     聊天API端点
     接收消息列表，返回AI回复
+    支持流式输出（当 stream=True 时）
     """
     try:
         # 验证消息列表不为空
@@ -116,9 +121,19 @@ async def chat(request: ChatRequest):
             for msg in request.messages
         ]
         
-        # 调用OpenAI API（阿里云百炼兼容 OpenAI API）
-        # 使用 run_in_executor 在异步环境中执行同步调用
-        import asyncio
+        # 如果启用流式输出
+        if request.stream:
+            return StreamingResponse(
+                stream_chat_response(model, messages),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no"  # 禁用 Nginx 缓冲
+                }
+            )
+        
+        # 非流式输出（兼容旧版本）
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
@@ -153,6 +168,116 @@ async def chat(request: ChatRequest):
         print(f"OpenAI API Error: {error_detail}")
         print(f"Traceback: {error_trace}")
         raise HTTPException(status_code=500, detail=f"Error calling OpenAI API: {error_detail}")
+
+
+async def stream_chat_response(model: str, messages: List[dict]):
+    """
+    流式输出生成器
+    返回 SSE 格式的数据流
+    """
+    import queue
+    import threading
+    
+    try:
+        # 创建一个队列用于在后台线程和异步生成器之间传递数据
+        chunk_queue = queue.Queue()
+        error_queue = queue.Queue()
+        done_event = threading.Event()
+        
+        def iterate_stream():
+            """在后台线程中迭代流式响应"""
+            try:
+                stream = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    stream=True
+                )
+                
+                for chunk in stream:
+                    chunk_queue.put(chunk)
+                
+                # 标记完成
+                done_event.set()
+            except Exception as e:
+                error_queue.put(e)
+                done_event.set()
+        
+        # 在后台线程中启动迭代
+        thread = threading.Thread(target=iterate_stream, daemon=True)
+        thread.start()
+        
+        # 异步生成 SSE 格式的数据
+        while True:
+            # 检查是否有错误
+            try:
+                error = error_queue.get_nowait()
+                raise error
+            except queue.Empty:
+                pass
+            
+            # 检查是否有新的 chunk
+            try:
+                chunk = chunk_queue.get(timeout=0.1)
+                
+                if chunk.choices and len(chunk.choices) > 0:
+                    delta = chunk.choices[0].delta
+                    
+                    # 构建符合 OpenAI 格式的响应
+                    response_data = {
+                        "choices": [{
+                            "delta": {
+                                "content": delta.content if hasattr(delta, 'content') and delta.content else "",
+                                "role": delta.role if hasattr(delta, 'role') and delta.role else "assistant"
+                            }
+                        }]
+                    }
+                    
+                    # 发送 SSE 格式的数据
+                    yield f"data: {json.dumps(response_data, ensure_ascii=False)}\n\n"
+                    
+            except queue.Empty:
+                # 如果队列为空且已完成，退出循环
+                if done_event.is_set():
+                    # 再次检查是否有剩余的数据
+                    try:
+                        while True:
+                            chunk = chunk_queue.get_nowait()
+                            if chunk.choices and len(chunk.choices) > 0:
+                                delta = chunk.choices[0].delta
+                                response_data = {
+                                    "choices": [{
+                                        "delta": {
+                                            "content": delta.content if hasattr(delta, 'content') and delta.content else "",
+                                            "role": delta.role if hasattr(delta, 'role') and delta.role else "assistant"
+                                        }
+                                    }]
+                                }
+                                yield f"data: {json.dumps(response_data, ensure_ascii=False)}\n\n"
+                    except queue.Empty:
+                        break
+                else:
+                    # 等待一小段时间后继续检查
+                    await asyncio.sleep(0.01)
+                    continue
+        
+        # 发送结束标记
+        yield "data: [DONE]\n\n"
+        
+    except Exception as e:
+        # 发送错误信息
+        import traceback
+        error_detail = str(e)
+        error_trace = traceback.format_exc()
+        print(f"Stream Error: {error_detail}")
+        print(f"Traceback: {error_trace}")
+        
+        error_data = {
+            "error": {
+                "message": error_detail,
+                "type": type(e).__name__
+            }
+        }
+        yield f"data: {json.dumps(error_data, ensure_ascii=False)}\n\n"
 
 
 # ==================== 数据库持久化 API ====================
