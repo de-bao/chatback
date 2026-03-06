@@ -148,6 +148,16 @@ async def health():
 async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     """用户注册"""
     try:
+        # 添加调试信息
+        print(f"🔍 [注册] 接收到的数据:")
+        print(f"  - username: {repr(user_data.username)} (类型: {type(user_data.username)})")
+        print(f"  - email: {repr(user_data.email)} (类型: {type(user_data.email)})")
+        print(f"  - password: {repr(user_data.password)} (类型: {type(user_data.password)})")
+        print(f"  - password 字符长度: {len(user_data.password) if user_data.password else 0}")
+        if user_data.password:
+            password_bytes = user_data.password.encode('utf-8')
+            print(f"  - password 字节长度: {len(password_bytes)}")
+        
         # 检查用户名是否已存在
         existing_user = db.query(User).filter(User.username == user_data.username).first()
         if existing_user:

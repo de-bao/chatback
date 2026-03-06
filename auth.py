@@ -44,7 +44,34 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def get_password_hash(password: str) -> str:
     """加密密码"""
-    return pwd_context.hash(password)
+    # 添加调试信息
+    print(f"🔍 [密码哈希] 接收到的密码类型: {type(password)}")
+    print(f"🔍 [密码哈希] 接收到的密码长度: {len(password) if password else 0} 字符")
+    
+    # 确保密码是字符串
+    if not isinstance(password, str):
+        password = str(password)
+        print(f"⚠️ [密码哈希] 密码不是字符串，已转换为字符串")
+    
+    # 计算字节长度
+    password_bytes = password.encode('utf-8')
+    password_byte_len = len(password_bytes)
+    print(f"🔍 [密码哈希] 密码字节长度: {password_byte_len} 字节")
+    print(f"🔍 [密码哈希] 密码内容: {repr(password)}")
+    
+    # bcrypt 限制：密码不能超过 72 字节，自动截断
+    if password_byte_len > 72:
+        print(f"⚠️ [密码哈希] 密码超过 72 字节，截断到 72 字节")
+        password = password_bytes[:72].decode('utf-8', errors='ignore')
+        print(f"🔍 [密码哈希] 截断后密码字节长度: {len(password.encode('utf-8'))} 字节")
+    
+    try:
+        hashed = pwd_context.hash(password)
+        print(f"✅ [密码哈希] 密码哈希成功")
+        return hashed
+    except Exception as e:
+        print(f"❌ [密码哈希] 哈希失败: {type(e).__name__}: {str(e)}")
+        raise
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
