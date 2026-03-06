@@ -4,7 +4,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -12,6 +11,7 @@ from models import User
 from database import get_db
 import os
 from dotenv import load_dotenv
+import bcrypt
 
 load_dotenv()
 
@@ -30,16 +30,25 @@ JWT_EXPIRE_HOURS = 24 * 365  # 365天
 # 启动时打印JWT配置（用于调试）
 print(f"🔐 [JWT配置] SECRET_KEY: {JWT_SECRET_KEY[:20]}... (长度: {len(JWT_SECRET_KEY)})")
 
-# 密码加密
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """验证密码"""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        # 确保密码是字节串
+        if isinstance(plain_password, str):
+            plain_password = plain_password.encode('utf-8')
+        
+        # 确保哈希值是字节串
+        if isinstance(hashed_password, str):
+            hashed_password = hashed_password.encode('utf-8')
+        
+        return bcrypt.checkpw(plain_password, hashed_password)
+    except Exception as e:
+        print(f"❌ [密码验证失败] {type(e).__name__}: {str(e)}")
+        return False
 
 
 def get_password_hash(password: str) -> str:
@@ -62,13 +71,17 @@ def get_password_hash(password: str) -> str:
     # bcrypt 限制：密码不能超过 72 字节，自动截断
     if password_byte_len > 72:
         print(f"⚠️ [密码哈希] 密码超过 72 字节，截断到 72 字节")
-        password = password_bytes[:72].decode('utf-8', errors='ignore')
-        print(f"🔍 [密码哈希] 截断后密码字节长度: {len(password.encode('utf-8'))} 字节")
+        password_bytes = password_bytes[:72]
+        print(f"🔍 [密码哈希] 截断后密码字节长度: {len(password_bytes)} 字节")
     
     try:
-        hashed = pwd_context.hash(password)
+        # 生成盐并哈希密码
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password_bytes, salt)
+        # 返回字符串格式（兼容 passlib 格式）
+        hashed_str = hashed.decode('utf-8')
         print(f"✅ [密码哈希] 密码哈希成功")
-        return hashed
+        return hashed_str
     except Exception as e:
         print(f"❌ [密码哈希] 哈希失败: {type(e).__name__}: {str(e)}")
         raise
